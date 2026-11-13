@@ -13,6 +13,9 @@ aws:
   region: ${AWS_REGION:us-east-1}
 
 fatum:
+  # Base del UserService: se usa para traducir el `sub` del token al `userId` con el que se
+  # guardan las notificaciones (los eventos traen ese identificador, no el `sub`).
+  base-url: ${BASE_URL:https://btx2xtbb3a.execute-api.us-east-1.amazonaws.com}
   notifications:
     # Cola SQS suscrita al bus de EventBridge (reglas de EventBridge -> SQS).
     queue-name: ${NOTIFICATION_QUEUE_NAME:fatum-notification-queue}
