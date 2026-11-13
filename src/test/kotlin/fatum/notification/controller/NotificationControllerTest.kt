@@ -1,6 +1,7 @@
 package fatum.notification.controller
 
 import fatum.notification.configuration.CognitoAuthorities
+import fatum.notification.configuration.PlatformUserResolver
 import fatum.notification.configuration.SecurityConfig
 import fatum.notification.model.Notification
 import fatum.notification.model.constant.NotificationType
@@ -43,10 +44,12 @@ class NotificationControllerTest {
 
     @MockitoBean lateinit var notificationService: NotificationService
     @MockitoBean lateinit var sseHub: SseHub
+    @MockitoBean lateinit var users: PlatformUserResolver
 
     @Test
     fun `the live channel opens for the user of the token`() {
-        whenever(sseHub.subscribe("client-1")).thenReturn(SseEmitter())
+        whenever(users.resolve(any())).thenReturn("user-uuid-1")
+        whenever(sseHub.subscribe("user-uuid-1")).thenReturn(SseEmitter())
 
         mvc.perform(get("/notifications/stream").with(verifiedToken()))
             .andExpect(status().isOk())
@@ -66,11 +69,12 @@ class NotificationControllerTest {
 
     @Test
     fun `the inbox of the token owner is returned`() {
+        whenever(users.resolve(any())).thenReturn("user-uuid-1")
         whenever(notificationService.list(any(), any<Int>(), anyOrNull(), any())).thenReturn(
             NotificationPage(
                 items = listOf(
                     Notification().apply {
-                        userId = "client-1"
+                        userId = "user-uuid-1"
                         id = "2026-11-12T10:00:00Z#a"
                         type = NotificationType.ORDER
                         title = "Solicitud aceptada"
@@ -90,8 +94,8 @@ class NotificationControllerTest {
             .andExpect(jsonPath("$.items[0].data.orderId").value("order-1"))
             .andExpect(jsonPath("$.nextCursor").doesNotExist())
 
-        // La bandeja se pide con el `sub` del token, no con un parámetro de la URL.
-        verify(notificationService).list("client-1", 20, null, false)
+        // La bandeja se pide con el usuario traducido del token, no con un parámetro de la URL.
+        verify(notificationService).list("user-uuid-1", 20, null, false)
     }
 
     @Test

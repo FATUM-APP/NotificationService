@@ -1,6 +1,6 @@
 package fatum.notification.controller
 
-import fatum.notification.configuration.CurrentUser
+import fatum.notification.configuration.PlatformUserResolver
 import fatum.notification.dto.MarkAllReadResponse
 import fatum.notification.dto.NotificationPageResponse
 import fatum.notification.dto.NotificationResponse
@@ -23,14 +23,16 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 /**
  * La bandeja del usuario autenticado.
  *
- * <p>El `userId` sale del token (el `sub` de Cognito), nunca de la URL: así nadie puede pedir la
- * bandeja de otra persona cambiando un parámetro.</p>
+ * <p>El `userId` sale del token, traducido al identificador con el que se guardan las
+ * notificaciones (`PlatformUserResolver`), nunca de la URL: así nadie puede pedir la bandeja de
+ * otra persona cambiando un parámetro.</p>
  */
 @RestController
 @RequestMapping("/notifications")
 class NotificationController(
     private val notificationService: NotificationService,
-    private val sseHub: SseHub
+    private val sseHub: SseHub,
+    private val users: PlatformUserResolver
 ) {
 
     /**
@@ -39,7 +41,7 @@ class NotificationController(
      */
     @GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun stream(authentication: Authentication): SseEmitter =
-        sseHub.subscribe(CurrentUser.id(authentication))
+        sseHub.subscribe(users.resolve(authentication))
 
     @GetMapping
     fun list(
@@ -48,7 +50,7 @@ class NotificationController(
         @RequestParam(required = false) cursor: String?,
         @RequestParam(defaultValue = "false") unreadOnly: Boolean
     ): NotificationPageResponse {
-        val page = notificationService.list(CurrentUser.id(authentication), limit, cursor, unreadOnly)
+        val page = notificationService.list(users.resolve(authentication), limit, cursor, unreadOnly)
         return NotificationPageResponse(
             items = page.items.map(NotificationResponse::from),
             nextCursor = page.nextCursor
@@ -57,21 +59,21 @@ class NotificationController(
 
     @GetMapping("/unread-count")
     fun unreadCount(authentication: Authentication): UnreadCountResponse =
-        UnreadCountResponse(notificationService.unreadCount(CurrentUser.id(authentication)))
+        UnreadCountResponse(notificationService.unreadCount(users.resolve(authentication)))
 
     @PutMapping("/{id}/read")
     fun markRead(authentication: Authentication, @PathVariable id: String): ResponseEntity<Void> {
-        if (!notificationService.markRead(CurrentUser.id(authentication), id)) throw NotificationNotFoundException()
+        if (!notificationService.markRead(users.resolve(authentication), id)) throw NotificationNotFoundException()
         return ResponseEntity.noContent().build()
     }
 
     @PutMapping("/read-all")
     fun markAllRead(authentication: Authentication): MarkAllReadResponse =
-        MarkAllReadResponse(notificationService.markAllRead(CurrentUser.id(authentication)))
+        MarkAllReadResponse(notificationService.markAllRead(users.resolve(authentication)))
 
     @DeleteMapping("/{id}")
     fun delete(authentication: Authentication, @PathVariable id: String): ResponseEntity<Void> {
-        if (!notificationService.delete(CurrentUser.id(authentication), id)) throw NotificationNotFoundException()
+        if (!notificationService.delete(users.resolve(authentication), id)) throw NotificationNotFoundException()
         return ResponseEntity.noContent().build()
     }
 }
